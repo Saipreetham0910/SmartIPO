@@ -1,0 +1,127 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract IntellectualProperty {
+
+    enum IPType { Trademark, Patent, Copyright, Design }
+
+    struct OwnershipRecord {
+        address owner;
+        uint256 transferTime;
+        }
+    struct IP {
+        uint256 id;
+        IPType ipType;
+        address currentOwner;
+        string description;
+        bytes32 documentHash;
+        uint256 registrationTime;
+        bool verified;
+        bool exist;
+    }
+    uint256 public ipCounter;
+
+    mapping(uint256 => IP) public ipAsset;
+    mapping(uint256 => OwnershipRecord[]) public ownershipHistory;
+    mapping(bytes32 => bool) private registeredhashes;
+    mapping(uint256 => mapping(address => bool))public verifiers;
+
+    event IPRegistered(uint256 indexed ipId, address indexed owner, IPType ipType);
+    event OwnershipTransferred(uint256 indexed ipID,address indexed currentowner,address indexed newOwner);
+    event IPVerified(uint256 indexed ipId, address indexed verifier);
+
+    modifier ipExists(uint256 _ipID){
+        require(ipAsset[_ipID].exist == true, "IP does not exist");
+     _;
+    }
+
+    modifier OnlyIPOwner(uint256 _ipID){
+        require(ipAsset[_ipID].currentOwner == msg.sender, "Only owner can perform this action");
+    _;
+    }
+    
+    function RegisterIP(
+        IPType _ipType,
+        string calldata _description,
+        bytes32 documentHash
+    ) external {
+        require(documentHash != bytes32(0), "Document hash cannot be empty");
+        require(!registeredhashes[documentHash], "Document hash already registered");
+
+        ipAsset[ipCounter] = IP({
+            id : ipCounter,
+            ipType: _ipType,
+            description: _description,
+            documentHash: documentHash,
+            currentOwner: msg.sender,
+            registrationTime: block.timestamp,
+            verified: false,
+            exist: true    
+    });
+
+    registeredhashes[documentHash] = true;
+    ownershipHistory[ipCounter].push(
+            OwnershipRecord(msg.sender, block.timestamp));
+
+        emit IPRegistered(ipCounter, msg.sender, _ipType);
+
+        ipCounter++;
+       
+    
+}
+   function transferOwnership(uint256 ipID, address _newOwner)
+    external
+    ipExists(ipID)
+    OnlyIPOwner(ipID)
+{
+    require(_newOwner != address(0), "Invalid new Owner");
+    address previousOwner = ipAsset[ipID].currentOwner;
+    ipAsset[ipID].currentOwner = _newOwner;
+    ownershipHistory[ipID].push(
+        OwnershipRecord(previousOwner, block.timestamp)
+    );
+    emit OwnershipTransferred(ipID, previousOwner, _newOwner);
+}
+ function verifyIP(uint256 _ipID)
+ external ipExists(_ipID){
+require(!verifiers[_ipID][msg.sender], "Already verified");
+
+        verifiers[_ipID][msg.sender] = true;
+        ipAsset[_ipID].verified = true;
+
+        emit IPVerified(_ipID, msg.sender);
+    }
+
+    function getIPdetails(uint256 _ipID)
+    external 
+    view
+        ipExists(_ipID)
+        returns (
+            IPType,
+            string memory,
+            address,
+            uint256,
+            bool
+        )
+    {
+        IP memory ip = ipAsset[_ipID];
+
+        return (
+            ip.ipType,
+            ip.description,
+            ip.currentOwner,
+            ip.registrationTime,
+            ip.verified
+        );
+    }
+    function getOwnershipHistory(uint256 _ipID)
+        external
+        view
+        ipExists(_ipID)
+        returns (OwnershipRecord[] memory)
+    {
+        return ownershipHistory[_ipID];
+    }
+}
+ 
+
